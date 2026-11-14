@@ -26,6 +26,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/e2bgateway/e2bgateway/internal/adapter"
+	"github.com/e2bgateway/e2bgateway/internal/adapter/e2bcloud"
 	mockadapter "github.com/e2bgateway/e2bgateway/internal/adapter/mock"
 	"github.com/e2bgateway/e2bgateway/internal/api/dto"
 	v1 "github.com/e2bgateway/e2bgateway/internal/api/v1"
@@ -122,6 +123,60 @@ func TestCreateSandboxHandler(t *testing.T) {
 	}
 	if resp.EnvdVersion == "" {
 		t.Error("expected non-empty envdVersion")
+	}
+}
+
+// Exercise both the HTTP handler and cloud adapter, including failed info lookups.
+func TestCreateSandboxHandlerCloudConnection(t *testing.T) {
+	for _, infoStatus := range []int{http.StatusOK, http.StatusNotFound} {
+		for _, token := range []string{"cloud-envd-token", ""} {
+			t.Run(http.StatusText(infoStatus)+"/"+token, func(t *testing.T) {
+				want := dto.SandboxCreateResponse{
+					SandboxID: "cloud-id", TemplateID: "base", ClientID: "cloud-client",
+					EnvdVersion: "0.5.1", EnvdAccessToken: token,
+					SandboxDomain: "region.example.com", TrafficAccessToken: "cloud-traffic-token",
+				}
+				cloud := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch {
+					case r.Method == http.MethodPost && r.URL.Path == "/sandboxes":
+						_ = json.NewEncoder(w).Encode(want)
+					case r.Method == http.MethodGet && r.URL.Path == "/sandboxes/cloud-id":
+						w.WriteHeader(infoStatus)
+						_ = json.NewEncoder(w).Encode(dto.SandboxInfo{
+							SandboxID: "cloud-id", TemplateID: "base", State: "running",
+						})
+					default:
+						t.Errorf("unexpected cloud request %s %s", r.Method, r.URL.Path)
+						w.WriteHeader(http.StatusNotFound)
+					}
+				}))
+				defer cloud.Close()
+				registry := adapter.NewRegistry()
+				client := e2bcloud.NewClient(e2bcloud.ClientConfig{Endpoint: cloud.URL})
+				if err := registry.Register(e2bcloud.NewAdapterWithClient("cloud", client, registry)); err != nil {
+					t.Fatal(err)
+				}
+				router := routing.NewRouter(config.RoutingConfig{DefaultBackend: "cloud"}, registry)
+				defer router.Stop()
+				handler := v1.CreateSandboxHandler(registry, router, "gateway.example.com")
+				request := httptest.NewRequest(http.MethodPost, "/sandboxes", strings.NewReader(`{"templateID":"base"}`))
+				response := httptest.NewRecorder()
+				handler(response, request)
+				if response.Code != http.StatusCreated {
+					t.Fatalf("create status = %d, body = %s", response.Code, response.Body.String())
+				}
+				var got dto.SandboxCreateResponse
+				if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
+					t.Fatal(err)
+				}
+				if got != want {
+					t.Errorf("connection response = %#v, want %#v", got, want)
+				}
+				if backend, ok := registry.SandboxBackend().Get(want.SandboxID); !ok || backend != "cloud" {
+					t.Errorf("sandbox backend = %q, found = %v", backend, ok)
+				}
+			})
+		}
 	}
 }
 

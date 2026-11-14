@@ -79,25 +79,29 @@ func CreateSandboxHandler(registry *adapter.Registry, router *routing.Router, en
 			return
 		}
 
-		// Get envd access token from the adapter so the same token is stored in
-		// the adapter's cache (used by ValidateAccessToken in the envd proxy).
-		// If the adapter doesn't support access tokens, fall back to generating
-		// a local token.
-		var envdAccessToken string
-		if tok, tokErr := a.GetAccessToken(r.Context(), sandbox.SandboxID); tokErr == nil && tok != nil {
-			envdAccessToken = tok.Token
-		} else {
-			envdAccessToken = generateEnvdToken(sandbox.SandboxID)
+		connection := sandbox.Connection
+		if connection == nil {
+			connection = &adapter.SandboxConnection{
+				EnvdVersion:   "0.1.0",
+				SandboxDomain: envdDomain,
+			}
+			// Gateway-managed endpoints use the adapter's cached token.
+			if tok, tokErr := a.GetAccessToken(r.Context(), sandbox.SandboxID); tokErr == nil && tok != nil {
+				connection.EnvdAccessToken = tok.Token
+			} else {
+				connection.EnvdAccessToken = generateEnvdToken(sandbox.SandboxID)
+			}
 		}
 
 		resp := dto.SandboxCreateResponse{
-			SandboxID:       sandbox.SandboxID,
-			TemplateID:      sandbox.TemplateID,
-			Alias:           sandbox.Alias,
-			ClientID:        sandbox.ClientID,
-			EnvdVersion:     "0.1.0",
-			EnvdAccessToken: envdAccessToken,
-			SandboxDomain:   envdDomain,
+			SandboxID:          sandbox.SandboxID,
+			TemplateID:         sandbox.TemplateID,
+			Alias:              sandbox.Alias,
+			ClientID:           sandbox.ClientID,
+			EnvdVersion:        connection.EnvdVersion,
+			EnvdAccessToken:    connection.EnvdAccessToken,
+			SandboxDomain:      connection.SandboxDomain,
+			TrafficAccessToken: connection.TrafficAccessToken,
 		}
 
 		writeJSON(w, http.StatusCreated, resp)

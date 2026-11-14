@@ -147,6 +147,17 @@ type Sandbox struct {
 	Metadata   map[string]string `json:"metadata,omitempty"`
 	ClientID   string            `json:"clientID,omitempty"`
 	Backend    string            `json:"backend"`
+	// Connection preserves backend-issued SDK connection details on creation.
+	// A nil value means the gateway must supply its own connection details.
+	Connection *SandboxConnection `json:"-"`
+}
+
+// SandboxConnection contains credentials and addressing for the sandbox data plane.
+type SandboxConnection struct {
+	EnvdVersion        string
+	EnvdAccessToken    string
+	SandboxDomain      string
+	TrafficAccessToken string
 }
 
 // SandboxStatus represents the lifecycle state of a sandbox.

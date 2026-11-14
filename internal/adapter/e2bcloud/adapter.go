@@ -100,25 +100,26 @@ func (a *Adapter) CreateSandbox(ctx context.Context, req *adapter.CreateSandboxR
 		return nil, err
 	}
 
-	// Fetch full sandbox info
-	info, err := a.client.GetSandbox(ctx, resp.SandboxID)
-	if err != nil {
-		// Return partial info from create response
-		sbx := &adapter.Sandbox{
-			SandboxID:  resp.SandboxID,
-			TemplateID: resp.TemplateID,
-			Alias:      resp.Alias,
-			Status:     adapter.SandboxStatusStarting,
-			Backend:    a.name,
-		}
-		// Register sandbox in the sandbox→backend mapping
-		if a.registry != nil {
-			a.registry.SandboxBackend().Set(resp.SandboxID, a.name)
-		}
-		return sbx, nil
+	sbx := &adapter.Sandbox{
+		SandboxID:  resp.SandboxID,
+		TemplateID: resp.TemplateID,
+		Alias:      resp.Alias,
+		ClientID:   resp.ClientID,
+		Status:     adapter.SandboxStatusStarting,
+		Backend:    a.name,
 	}
-
-	sbx := dtoToSandbox(info, a.name)
+	// Enrich lifecycle information while retaining the creation credentials.
+	info, err := a.client.GetSandbox(ctx, resp.SandboxID)
+	if err == nil {
+		sbx = dtoToSandbox(info, a.name)
+		sbx.ClientID = resp.ClientID
+	}
+	sbx.Connection = &adapter.SandboxConnection{
+		EnvdVersion:        resp.EnvdVersion,
+		EnvdAccessToken:    resp.EnvdAccessToken,
+		SandboxDomain:      resp.SandboxDomain,
+		TrafficAccessToken: resp.TrafficAccessToken,
+	}
 	// Register sandbox in the sandbox→backend mapping
 	if a.registry != nil {
 		a.registry.SandboxBackend().Set(sbx.SandboxID, a.name)
