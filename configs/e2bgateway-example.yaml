@@ -18,7 +18,8 @@ backends:
     enabled: true
     config:
       endpoint: "https://api.e2b.dev"
-      apiKeyRef: "secret/e2b-cloud-api-key"
+      # Read once at startup; takes precedence over an inline apiKey.
+      apiKeyFile: "/run/secrets/e2b-cloud-api-key"
       timeout: 60s
       maxRetries: 3
       pool:
@@ -69,7 +70,9 @@ backends:
 auth:
   providers:
     - type: apikey
-      secretRef: "e2bgw-api-keys"
+      # One key per file, loaded at startup. Restart after rotating files.
+      keyFiles:
+        - "/run/secrets/e2bgw-api-key"
       headerName: "X-API-Key"
       alternateHeader: "Authorization"
       bearerPrefix: true

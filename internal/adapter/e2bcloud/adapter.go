@@ -43,6 +43,14 @@ func NewAdapter(cfg config.BackendConfig, registry *adapter.Registry) (*Adapter,
 	endpoint, _ := cfg.Config["endpoint"].(string)
 	// Viper lowercases YAML map keys, so check both camelCase and lowercase variants.
 	apiKey := util.StringVal(cfg.Config, "apiKey", "apikey")
+	// An explicit file takes precedence over the inline key and must be readable.
+	if path := util.StringVal(cfg.Config, "apiKeyFile", "apikeyfile"); path != "" {
+		var err error
+		apiKey, err = config.ReadSecretFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("configuring E2B Cloud API key: %w", err)
+		}
+	}
 
 	if endpoint == "" {
 		endpoint = "https://api.e2b.dev"

@@ -78,6 +78,8 @@ type AuthProviderConfig struct {
 	BearerPrefix    bool   `mapstructure:"bearerPrefix"`
 	// Keys is a list of static API keys (for apikey provider).
 	Keys []string `mapstructure:"keys"`
+	// KeyFiles loads one API key per file at startup, in addition to Keys.
+	KeyFiles []string `mapstructure:"keyFiles"`
 	// JWT-specific
 	Issuer    string        `mapstructure:"issuer"`
 	JWKS      string        `mapstructure:"jwks"`    // Public JWKS JSON, configured locally.

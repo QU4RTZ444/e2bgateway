@@ -83,6 +83,15 @@ func NewManager(cfg config.AuthConfig) (*Manager, error) {
 	for _, pCfg := range cfg.Providers {
 		switch pCfg.Type {
 		case providerTypeAPIKey:
+			keys := append([]string(nil), pCfg.Keys...)
+			for _, path := range pCfg.KeyFiles {
+				key, err := config.ReadSecretFile(path)
+				if err != nil {
+					return nil, fmt.Errorf("configuring API key provider: %w", err)
+				}
+				keys = append(keys, key)
+			}
+			pCfg.Keys = keys
 			p := NewAPIKeyProvider(pCfg)
 			m.providers = append(m.providers, p)
 		case providerTypeJWT:

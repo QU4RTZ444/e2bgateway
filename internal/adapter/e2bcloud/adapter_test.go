@@ -20,6 +20,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -447,6 +449,47 @@ func TestE2BCloudClient_SetEnvs(t *testing.T) {
 // TestNewAdapter_APIKeyConfigVariants verifies that NewAdapter reads the API key
 // from both lowercase ("apikey", as Viper stores YAML map keys) and camelCase
 // ("apiKey") config variants, by asserting the X-API-Key header on captured requests.
+func TestNewAdapter_APIKeyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "api-key")
+	if err := os.WriteFile(path, []byte("file-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "file-key" {
+			t.Error("request did not use the file credential")
+		}
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer ts.Close()
+	for _, field := range []string{"apiKeyFile", "apikeyfile"} {
+		cfg := config.BackendConfig{Name: "cloud", Config: map[string]any{
+			"endpoint": ts.URL, "apiKey": "old-inline-key", field: path,
+		}}
+		a, err := NewAdapter(cfg, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := a.HealthCheck(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := config.BackendConfig{Name: "cloud", Config: map[string]any{
+		"apiKey": "old-inline-key", "apikeyfile": path,
+	}}
+	if err := os.WriteFile(path, []byte(" \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewAdapter(cfg, nil); err == nil {
+		t.Fatal("empty file must not fall back to the inline key")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewAdapter(cfg, nil); err == nil {
+		t.Fatal("missing file must not fall back to the inline key")
+	}
+}
+
 func TestNewAdapter_APIKeyConfigVariants(t *testing.T) {
 	tests := []struct {
 		name      string

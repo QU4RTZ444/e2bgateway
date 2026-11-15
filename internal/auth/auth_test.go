@@ -24,6 +24,8 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,6 +33,44 @@ import (
 
 	"github.com/e2bgateway/e2bgateway/internal/config"
 )
+
+func TestManagerKeyFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "api-key")
+	if err := os.WriteFile(path, []byte("file-key\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.AuthConfig{Providers: []config.AuthProviderConfig{{
+		Type: "apikey", Keys: []string{"inline-key"}, KeyFiles: []string{path},
+	}}}
+	mgr, err := NewManager(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"inline-key", "file-key"} {
+		r := httptest.NewRequest(http.MethodGet, "/sandboxes", nil)
+		r.Header.Set("X-API-Key", key)
+		if _, err := mgr.Authenticate(r); err != nil {
+			t.Fatalf("configured key rejected: %v", err)
+		}
+	}
+	if len(cfg.Providers[0].Keys) != 1 {
+		t.Fatal("input configuration was mutated")
+	}
+	for _, contents := range []string{"", " \n\t"} {
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := NewManager(cfg); err == nil {
+			t.Fatal("empty key file must fail startup even with an inline key")
+		}
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewManager(cfg); err == nil {
+		t.Fatal("missing key file must fail startup")
+	}
+}
 
 func TestAPIKeyProvider_Authenticate(t *testing.T) {
 	p := NewAPIKeyProvider(config.AuthProviderConfig{
