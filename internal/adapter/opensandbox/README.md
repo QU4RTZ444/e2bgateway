@@ -29,6 +29,7 @@ backends:
 
 - `baseURL` (required): OpenSandbox Lifecycle API endpoint
 - `apiKey` (optional): API key for authentication
+- `apiKeyFile` (optional): Read the API key from a file at startup, trimming surrounding whitespace. Overrides `apiKey`; an unreadable or empty file prevents startup. Relative paths are resolved against the gateway process working directory.
 - `execdURL` (optional): OpenSandbox Execd API endpoint for command execution
 - `execdToken` (optional): Token for Execd API authentication
 

@@ -46,6 +46,14 @@ func NewAdapterFromConfig(bcfg config.BackendConfig, registry *adapter.Registry)
 	if v, ok := util.LookupString(bcfg.Config, "apikey", "apiKey"); ok {
 		cfg.APIKey = v
 	}
+	// Explicit secret files override inline values and fail closed on read errors.
+	if path := util.StringVal(bcfg.Config, "apiKeyFile", "apikeyfile"); path != "" {
+		var err error
+		cfg.APIKey, err = config.ReadSecretFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("configuring OpenSandbox API key: %w", err)
+		}
+	}
 	if v, ok := util.LookupString(bcfg.Config, "execdurl", "execdURL"); ok {
 		cfg.ExecdURL = v
 	}
